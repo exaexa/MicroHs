@@ -48,16 +48,19 @@ toStringCMdl (mainName, ds) =
         e -> e
     def :: (String -> String) -> (Int, Exp) -> (String -> String)
     def r (i, e) =
-      ("A " ++) . toStringP (substv e) . ((":" ++ show i ++  " @\n") ++) . r . ("@" ++)
-  in combVersion ++ show ndefs ++ "\n" ++ res " }"
+      (".thunkcode mhs_" ++) . (show i++) . (":\n"++) .  toStringP (substv e) . ('\n':) . r
+  in "# mhc/uskel, combinators " ++ combVersion ++ "# ndefs: " ++ show ndefs ++ "\n" ++ res "\n"
+
+toStringP :: Exp -> (String -> String)
+toStringP = snd . toStringIP
 
 -- Avoid quadratic concatenation by using difference lists,
 -- turning concatenation into function composition.
-toStringP :: Exp -> (String -> String)
-toStringP ae =
+toStringIP :: Exp -> (Int, String -> String)
+toStringIP ae =
   case ae of
-    Var x   -> (showIdent x ++) . (' ' :)
-    Lit (LStr s) ->
+    Var x   -> (2, ("thunk $mhs_" ++) . (showIdent x ++) . (", $0\n" ++))
+    {-Lit (LStr s) ->
       -- Encode very short string directly as combinators.
       if length s > 1 then
         toStringP (App (Lit (LPrim "fromUTF8")) (Lit (LUStr (utf8encode s))))
@@ -65,13 +68,22 @@ toStringP ae =
         toStringP (encodeString s)
     Lit (LUStr s) ->
       (quoteString s ++) . (' ' :)
+    -}
     Lit (LInteger _) -> undefined
     Lit (LRat _) -> undefined
-    Lit (LTick s) -> ('!':) . (quoteString s ++) . (' ' :)
-    Lit l   -> (showLit l ++) . (' ' :)
+    Lit (LTick _s) -> undefined --('!':) . (quoteString s ++) . (' ' :)
+    -- the primitives' thunks should return proper FUNn_code because we're too
+    -- lazy to know the argcount here:
+    Lit (LForImp x _)   -> (2, ("thunk $mhsforeign_" ++) . (x ++) . (", $0\n" ++))
+    Lit (LPrim p)   -> (2, ("thunk $mhsprim_" ++) . (p ++) . (", $0\n" ++))
+    Lit (LInt i) -> (2, ("thunk $INT_CODE, $"++) . (show i ++) . ('\n':))
+    Lit l   -> (0, ("# NO LITERAL: " ++) . (showLit l ++) . ('\n' :))
     Lam _x _e -> undefined -- (("(\\" ++ showIdent x ++ " ") ++) . toStringP e . (")" ++)
     --App f a -> ("(" ++) . toStringP f . (" " ++) . toStringP a . (")" ++)
-    App f a -> toStringP f . toStringP a . ("@" ++)
+    -- TODO: rfold over apps to do more of this at once; uskel $apply can apply a lot of stuff
+    App f a -> let (nf,sf) = toStringIP f
+                   (na,sa) = toStringIP a
+               in (nf+na+4, sf . sa . (("lea "++show (8*na)++"(%rsp), %rax\nthunk $apply, $2, %rax, %rsp\n")++))
 
 quoteString :: String -> String
 quoteString s =
