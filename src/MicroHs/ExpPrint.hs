@@ -59,7 +59,7 @@ toStringP = snd . toStringIP
 toStringIP :: Exp -> (Int, String -> String)
 toStringIP ae =
   case ae of
-    Var x   -> (2, ("thunk $mhs_" ++) . (showIdent x ++) . (", $0\n" ++))
+    Var x   -> (2, ("thunk $mhs" ++) . (showIdent x ++) . (", $0\n" ++))
     {-Lit (LStr s) ->
       -- Encode very short string directly as combinators.
       if length s > 1 then
